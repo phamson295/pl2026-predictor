@@ -120,20 +120,31 @@ else {
 }
 render();
 
+const isLocalServer = location.protocol !== "file:" && ["localhost", "127.0.0.1"].includes(location.hostname);
 const btn = $("#refresh"), msg = $("#msg");
 btn.onclick = async () => {
   if (location.protocol === "file:") { msg.textContent = "Cần mở qua start.bat (server cục bộ) để dùng nút này."; return; }
-  btn.disabled = true; btn.textContent = "Đang cập nhật…"; msg.textContent = "";
+  btn.disabled = true; btn.textContent = "Đang kiểm tra…"; msg.textContent = "";
+  const prevUpdated = window.PL_DATA && window.PL_DATA.updatedAt;
   try {
-    // Trên web tĩnh (GitHub Pages) không có /update: chỉ tải lại dữ liệu mới nhất đã được tự cập nhật.
-    const r = await fetch("/update", { method: "POST" });
-    const j = r.ok || r.status === 500 ? await r.json().catch(() => null) : null;
-    if (j && !j.ok) throw new Error(j.log);
+    if (isLocalServer) {
+      // Có server cục bộ (start.bat): chạy lại toàn bộ tính toán ngay.
+      const r = await fetch("/update", { method: "POST" });
+      const j = await r.json().catch(() => null);
+      if (!j || !j.ok) throw new Error((j && j.log) || "Không nhận được phản hồi từ server");
+    }
+    // Trang tĩnh (GitHub Pages): không tự tính lại được, chỉ tải bản dữ liệu mới nhất mà lịch tự động (hằng ngày) đã tạo ra.
     await new Promise((ok, err) => {
       const s = document.createElement("script");
-      s.src = "data.js?t=" + Date.now(); s.onload = ok; s.onerror = err; document.head.appendChild(s);
+      s.src = "data.js?t=" + Date.now(); s.onload = ok; s.onerror = () => err(new Error("Không tải được data.js"));
+      document.head.appendChild(s);
     });
-    render(); msg.textContent = "Đã cập nhật xong.";
+    render();
+    if (!isLocalServer) {
+      msg.textContent = window.PL_DATA.updatedAt === prevUpdated
+        ? `Đây đã là dữ liệu mới nhất (lịch tự động cập nhật 1 lần/ngày, lần cập nhật gần nhất: ${new Date(window.PL_DATA.updatedAt).toLocaleString("vi-VN")}).`
+        : "Đã có dữ liệu mới, đang hiển thị.";
+    } else msg.textContent = "Đã cập nhật xong.";
   } catch (e) { msg.textContent = "Lỗi cập nhật: " + (e.message || e); }
   btn.disabled = false; btn.textContent = "🔄 Cập nhật ngay";
 };
