@@ -80,13 +80,27 @@ else {
     `<div class="row"><span class="pos">${i + 1}</span><img src="${badge(t.code)}" alt=""><div><b>${t.name}</b><div class="bar"><i style="width:${t.champion / max * 100}%"></i></div></div><span class="pct-c">${pct(t.champion)}</span><span class="chg" title="Thay đổi so với lần cập nhật trước">${chg(t.change)}</span></div>`).join("") + `</div>`;
 
   // xu hướng
-  if (D.history.length > 1) {
+  if (D.history.length < 3) {
+    h += `<div class="card"><h2>Xu hướng theo ngày</h2><p class="formula">Mới có ${D.history.length} lần cập nhật lưu lại. Cần ít nhất 3 ngày để vẽ được biểu đồ xu hướng rõ ràng — quay lại sau vài ngày nhé.</p></div>`;
+  } else {
     const names = D.teams.slice(0, 5).map((t) => t.short), cols = ["#3d8bff", "#e5484d", "#f5a524", "#2fbf71", "#a970ff"];
-    const W = 600, H = 200, p = 30, n = D.history.length;
-    const ymax = Math.max(0.05, ...D.history.flatMap((x) => names.map((s) => x.champion[s] || 0)));
-    const X = (i) => p + (n === 1 ? 0 : i * (W - 2 * p) / (n - 1)), Y = (v) => H - 24 - v / ymax * (H - 44);
-    const lines = names.map((s, k) => `<polyline fill="none" stroke="${cols[k]}" stroke-width="2.2" points="${D.history.map((x, i) => X(i) + "," + Y(x.champion[s] || 0)).join(" ")}"/>`).join("");
-    h += `<div class="card"><h2>Xu hướng theo ngày (Top 5)</h2><svg viewBox="0 0 ${W} ${H}"><line x1="${p}" x2="${W - p}" y1="${H - 24}" y2="${H - 24}" stroke="var(--line)"/><text x="4" y="16" font-size="11" fill="var(--mute)">${(ymax * 100).toFixed(0)}%</text>${lines}</svg><div class="leg">${names.map((s, k) => `<span style="--c:${cols[k]}">${s}</span>`).join("")}</div></div>`;
+    const W = 640, H = 240, pl = 38, pr = 14, pt = 14, pb = 28, n = D.history.length;
+    const ymax = Math.max(0.05, ...D.history.flatMap((x) => names.map((s) => x.champion[s] || 0))) * 1.1;
+    const X = (i) => pl + (n === 1 ? 0 : i * (W - pl - pr) / (n - 1)), Y = (v) => H - pb - v / ymax * (H - pt - pb);
+    const gridN = 4;
+    const grid = Array.from({ length: gridN + 1 }, (_, k) => {
+      const v = ymax * k / gridN, y = Y(v);
+      return `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="4" y="${y + 4}" font-size="11" fill="var(--mute)">${(v * 100).toFixed(0)}%</text>`;
+    }).join("");
+    const shortDate = (d) => { const [, m, day] = d.split("-"); return `${day}/${m}`; };
+    const step = Math.max(1, Math.ceil(n / 6));
+    const xLabels = D.history.map((x, i) => (i % step === 0 || i === n - 1) ? `<text x="${X(i)}" y="${H - 8}" font-size="11" fill="var(--mute)" text-anchor="middle">${shortDate(x.date)}</text>` : "").join("");
+    const lines = names.map((s, k) => {
+      const pts = D.history.map((x, i) => `${X(i)},${Y(x.champion[s] || 0)}`).join(" ");
+      const dots = D.history.map((x, i) => `<circle cx="${X(i)}" cy="${Y(x.champion[s] || 0)}" r="2.6" fill="${cols[k]}"/>`).join("");
+      return `<polyline fill="none" stroke="${cols[k]}" stroke-width="2.2" points="${pts}"/>${dots}`;
+    }).join("");
+    h += `<div class="card"><h2>Xu hướng theo ngày (Top 5)</h2><svg viewBox="0 0 ${W} ${H}">${grid}${xLabels}${lines}</svg><div class="leg">${names.map((s, k) => `<span style="--c:${cols[k]}">${s}</span>`).join("")}</div></div>`;
   }
 
   h += `<div class="card"><h2>Bảng xếp hạng & dự kiến</h2><div class="scroll"><table><tr><th>Đội</th><th>Trận</th><th>Đ</th><th>HS</th><th>Phong độ</th><th>Điểm dự kiến</th><th>Top 4</th><th>Xuống hạng</th></tr>` +
