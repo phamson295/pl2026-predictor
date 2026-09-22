@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dự đoán vô địch Premier League</title>
+<style>
+  :root{--bg:#f6f4fa;--card:#fff;--ink:#1d1030;--mute:#6b6480;--line:#e6e1ef;--brand:#3d195b;--accent:#00c46a;--up:#0a9a55;--down:#d23a4a}
+  @media (prefers-color-scheme:dark){:root{--bg:#150c20;--card:#1f1430;--ink:#f1ecf8;--mute:#a196b8;--line:#33254a;--brand:#b98cf0;--accent:#2fe08c;--up:#2fe08c;--down:#ff6b7a}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+  #refresh{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}
+  #refresh:disabled{opacity:.6;cursor:wait} #msg{font-size:13px;color:var(--mute);margin-left:8px}
+  .wrap{max-width:960px;margin:0 auto;padding:20px 16px 48px}
+  header h1{margin:0;font-size:22px} header p{margin:2px 0 0;color:var(--mute);font-size:13px}
+  .hero{background:linear-gradient(135deg,#3d195b,#6b2fa3);color:#fff;border-radius:16px;padding:24px;margin:16px 0;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+  .hero img{width:96px;height:96px;object-fit:contain;background:#fff2;border-radius:16px;padding:8px}
+  .hero .lbl{font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.8}
+  .hero .name{font-size:32px;font-weight:700;line-height:1.15}
+  .hero .pct{font-size:44px;font-weight:800;color:#5dffb0;line-height:1}
+  .hero .sub{opacity:.85;font-size:13px;margin-top:6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .card h2{margin:0 0 12px;font-size:15px}
+  .row{display:grid;grid-template-columns:22px 28px 1fr 64px 52px;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:0}
+  .row img{width:26px;height:26px;object-fit:contain}
+  .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:3px}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+  .pct-c{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .chg{font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+  .up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--mute)}
+  .pos{color:var(--mute);font-size:13px;text-align:center}
+  table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{padding:6px 5px;text-align:right;border-top:1px solid var(--line)} th{color:var(--mute);font-weight:600;border-top:0}
+  th:nth-child(1),td:nth-child(1){text-align:left}
+  .scroll{overflow-x:auto}
+  .f{display:inline-block;width:16px;height:16px;line-height:16px;border-radius:3px;font-size:10px;text-align:center;color:#fff;margin-left:2px}
+  .W{background:#0a9a55}.D{background:#8a8299}.L{background:#d23a4a}
+  .res{display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+  .res:first-of-type{border-top:0}
+  .formula{font-size:13px;color:var(--mute)} .formula code{background:var(--bg);padding:1px 6px;border-radius:4px;color:var(--ink)}
+  svg{width:100%;height:auto;display:block} .leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;margin-top:8px}
+  .leg span:before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c);margin-right:5px}
+  @media(max-width:520px){.hero .name{font-size:24px}.hero .pct{font-size:36px}.row{grid-template-columns:20px 24px 1fr 56px 44px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏆 Dự đoán nhà vô địch Premier League <span id="season"></span></h1>
+    <p id="meta"></p>
+    <p><button id="refresh">🔄 Cập nhật ngay</button> <span id="msg"></span></p>
+  </header>
+  <div id="app"></div>
+</div>
+<script src="data.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const badge = (c) => `https://resources.premierleague.com/premierleague/badges/70/t${c}.png`;
+const pct = (x) => x >= 0.995 ? ">99%" : x < 0.001 ? "<0.1%" : (x * 100).toFixed(x < 0.1 ? 1 : 0) + "%";
+const chg = (c) => c == null ? "" : Math.abs(c) < 0.001 ? `<span class="flat">–</span>` :
+  `<span class="${c > 0 ? "up" : "down"}">${c > 0 ? "▲" : "▼"} ${(Math.abs(c) * 100).toFixed(1)}</span>`;
+
+function render() {
+const D = window.PL_DATA;
+if (!D) { $("#app").innerHTML = "<p>Chưa có dữ liệu. Chạy <code>node update.mjs</code> trước.</p>"; }
+else {
+  $("#season").textContent = D.season;
+  const upd = new Date(D.updatedAt).toLocaleString("vi-VN");
+  $("#meta").textContent = `Cập nhật: ${upd} · Đã đá ${D.matchesPlayed} trận, còn ${D.matchesLeft} trận · ${D.sims.toLocaleString()} mô phỏng`;
+  const top = D.teams[0];
+  const early = D.matchesPlayed < 30;
+  let h = `<div class="hero"><img src="${badge(top.code)}" alt=""><div>
+    <div class="lbl">Dự đoán vô địch</div><div class="name">${top.name}</div>
+    <div class="pct">${pct(top.champion)}</div>
+    <div class="sub">Điểm dự kiến cuối mùa: ${top.projPts} · Hiện có ${top.pts} điểm sau ${top.played} trận${early ? " · Mùa giải mới bắt đầu nên độ bất định còn rất lớn" : ""}</div></div></div>`;
+
+  const max = Math.max(...D.teams.map((t) => t.champion), 0.01);
+  h += `<div class="card"><h2>Xác suất vô địch</h2>` + D.teams.filter((t) => t.champion >= 0.0005 || D.teams.indexOf(t) < 8).map((t, i) =>
+    `<div class="row"><span class="pos">${i + 1}</span><img src="${badge(t.code)}" alt=""><div><b>${t.name}</b><div class="bar"><i style="width:${t.champion / max * 100}%"></i></div></div><span class="pct-c">${pct(t.champion)}</span><span class="chg" title="Thay đổi so với lần cập nhật trước">${chg(t.change)}</span></div>`).join("") + `</div>`;
+
+  // xu hướng
+  if (D.history.length > 1) {
+    const names = D.teams.slice(0, 5).map((t) => t.short), cols = ["#3d8bff", "#e5484d", "#f5a524", "#2fbf71", "#a970ff"];
+    const W = 600, H = 200, p = 30, n = D.history.length;
+    const ymax = Math.max(0.05, ...D.history.flatMap((x) => names.map((s) => x.champion[s] || 0)));
+    const X = (i) => p + (n === 1 ? 0 : i * (W - 2 * p) / (n - 1)), Y = (v) => H - 24 - v / ymax * (H - 44);
+    const lines = names.map((s, k) => `<polyline fill="none" stroke="${cols[k]}" stroke-width="2.2" points="${D.history.map((x, i) => X(i) + "," + Y(x.champion[s] || 0)).join(" ")}"/>`).join("");
+    h += `<div class="card"><h2>Xu hướng theo ngày (Top 5)</h2><svg viewBox="0 0 ${W} ${H}"><line x1="${p}" x2="${W - p}" y1="${H - 24}" y2="${H - 24}" stroke="var(--line)"/><text x="4" y="16" font-size="11" fill="var(--mute)">${(ymax * 100).toFixed(0)}%</text>${lines}</svg><div class="leg">${names.map((s, k) => `<span style="--c:${cols[k]}">${s}</span>`).join("")}</div></div>`;
+  }
+
+  h += `<div class="card"><h2>Bảng xếp hạng & dự kiến</h2><div class="scroll"><table><tr><th>Đội</th><th>Trận</th><th>Đ</th><th>HS</th><th>Phong độ</th><th>Điểm dự kiến</th><th>Top 4</th><th>Xuống hạng</th></tr>` +
+    [...D.teams].sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf).map((t) =>
+      `<tr><td>${t.name}</td><td>${t.played}</td><td><b>${t.pts}</b></td><td>${t.gd > 0 ? "+" : ""}${t.gd}</td><td>${t.form.map((r) => `<span class="f ${r}">${r}</span>`).join("")}</td><td>${t.projPts}</td><td>${pct(t.top4)}</td><td>${pct(t.relegation)}</td></tr>`).join("") + `</table></div></div>`;
+
+  if (D.lastResults.length) h += `<div class="card"><h2>Kết quả gần nhất</h2>` + D.lastResults.map((r) =>
+    `<div class="res"><span>${r.home} <b>${r.hs} - ${r.as}</b> ${r.away}</span><span class="flat">${new Date(r.date).toLocaleDateString("vi-VN")}</span></div>`).join("") + `</div>`;
+
+  h += `<div class="card formula"><h2>Công thức dự đoán</h2>
+    <p>1. Sức mạnh mỗi đội: <code>Tấn công = bàn ghi / TB giải</code>, <code>Phòng thủ = bàn thua / TB giải</code> (được kéo về 1.0 khi mới đá ít trận, để đầu mùa không dự đoán cực đoan).</p>
+    <p>2. Bàn thắng kỳ vọng của mỗi trận còn lại: <code>TB bàn nhà/khách × Tấn công(đội) × Phòng thủ(đối thủ)</code>. Hiện TB sân nhà ${D.avgHome}, sân khách ${D.avgAway}.</p>
+    <p>3. Mô phỏng ${D.sims.toLocaleString()} lần toàn bộ ${D.matchesLeft} trận còn lại (bàn thắng theo phân phối Poisson), cộng vào điểm hiện tại. Tỉ lệ vô địch = % số mùa mô phỏng mà đội đó đứng nhất.</p>
+    <p>Đây là mô hình đơn giản, không tính chấn thương, chuyển nhượng hay lịch thi đấu cúp. Dữ liệu: Fantasy Premier League API.</p></div>`;
+  $("#app").innerHTML = h;
+}
+}
+render();
+
+const btn = $("#refresh"), msg = $("#msg");
+btn.onclick = async () => {
+  if (location.protocol === "file:") { msg.textContent = "Cần mở qua start.bat (server cục bộ) để dùng nút này."; return; }
+  btn.disabled = true; btn.textContent = "Đang cập nhật…"; msg.textContent = "";
+  try {
+    // Trên web tĩnh (GitHub Pages) không có /update: chỉ tải lại dữ liệu mới nhất đã được tự cập nhật.
+    const r = await fetch("/update", { method: "POST" });
+    const j = r.ok || r.status === 500 ? await r.json().catch(() => null) : null;
+    if (j && !j.ok) throw new Error(j.log);
+    await new Promise((ok, err) => {
+      const s = document.createElement("script");
+      s.src = "data.js?t=" + Date.now(); s.onload = ok; s.onerror = err; document.head.appendChild(s);
+    });
+    render(); msg.textContent = "Đã cập nhật xong.";
+  } catch (e) { msg.textContent = "Lỗi cập nhật: " + (e.message || e); }
+  btn.disabled = false; btn.textContent = "🔄 Cập nhật ngay";
+};
+</script>
+</body>
+</html>
